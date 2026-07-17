@@ -19,7 +19,7 @@
     return response;
   };
 
-  // SSE stream parser — extracts message_limit events 
+  // SSE stream parser extracts message_limit events 
   async function interceptSSE(response) {
     try {
       const reader = response.body?.getReader();
@@ -51,10 +51,10 @@
             if (json?.type === 'message_stop') {
               post('message_stop', null);
             }
-          } catch { /* ignore */ }
+          } catch {}
         }
       }
-    } catch { /* best-effort */ }
+    } catch {}
   }
 
   // handle requests from content.js via postMessage

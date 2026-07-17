@@ -332,7 +332,7 @@
       editor.click();
       await sleep(200);
       document.execCommand('selectAll', false, null);
-      document.execCommand('insertText', false, 'hi');
+      document.execCommand('insertText', false, 'claude maxer saying hi');
       await sleep(300);
       const sendBtn = findSendButton();
       if (sendBtn && !sendBtn.disabled) {
