@@ -1,4 +1,3 @@
-// popup.js
 const toggleAuto     = document.getElementById('toggleAuto');
 const toggleSchedule = document.getElementById('toggleSchedule');
 const scheduleBody   = document.getElementById('scheduleBody');
@@ -9,6 +8,7 @@ const btnSave        = document.getElementById('btnSave');
 const btnCancel      = document.getElementById('btnCancel');
 const statusEl       = document.getElementById('status');
 const statusDot      = document.getElementById('statusDot');
+const nextTriggerEl  = document.getElementById('nextTrigger');
 const lastTriggeredEl = document.getElementById('lastTriggered');
 
 // day picker 
@@ -67,13 +67,49 @@ function setStatus(msg, isError = false) {
   statusEl.className = isError ? 'error' : '';
 }
 
+function formatDateTime(dateMs) {
+  return new Date(dateMs).toLocaleString([], {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+}
+
+function calcAutoResetFireTime(usageData) {
+  const resetAt = usageData?.five_hour?.resets_at;
+  if (!resetAt) return null;
+  return resetAt + 10000;
+}
+
+function updateNextTrigger(data) {
+  if (data.scheduledTrigger?.enabled) {
+    const fireAt = calcNextFireTime(data.scheduledTrigger.time, data.scheduledTrigger.days || []);
+    nextTriggerEl.textContent = fireAt
+      ? `Next trigger at: ${formatDateTime(fireAt)}`
+      : 'Next trigger at: no upcoming scheduled time';
+    return;
+  }
+
+  if (data.autoReset?.enabled) {
+    const fireAt = calcAutoResetFireTime(data.usageData);
+    nextTriggerEl.textContent = fireAt
+      ? `Next trigger at: ${formatDateTime(fireAt)}`
+      : 'Next trigger at: open Claude once to initialize auto-reset';
+    return;
+  }
+
+  nextTriggerEl.textContent = 'Next trigger at: not set';
+}
+
 function updateDot() {
   const active = toggleAuto.checked || toggleSchedule.checked;
   statusDot.classList.toggle('active', active);
 }
 
 // load saved state
-chrome.storage.sync.get(['autoReset', 'scheduledTrigger', 'lastTriggeredAt'], (data) => {
+chrome.storage.sync.get(['autoReset', 'scheduledTrigger', 'lastTriggeredAt', 'usageData'], (data) => {
   if (data.autoReset?.enabled) {
     toggleAuto.checked = true;
     sectionAuto.classList.add('enabled');
@@ -91,6 +127,8 @@ chrome.storage.sync.get(['autoReset', 'scheduledTrigger', 'lastTriggeredAt'], (d
     const d = new Date(data.lastTriggeredAt);
     lastTriggeredEl.textContent = `Last triggered: ${d.toLocaleString()}`;
   }
+
+  updateNextTrigger(data);
 
   updateDot();
 });
@@ -129,10 +167,20 @@ btnSave.addEventListener('click', () => {
         weekday: 'short', hour: '2-digit', minute: '2-digit'
       });
       setStatus(`Saved — next trigger ${timeDisplay}`);
+      updateNextTrigger({
+        autoReset: { enabled: autoEnabled },
+        scheduledTrigger: { enabled: true, time: timeStr, days },
+        usageData: null
+      });
     });
   } else {
     chrome.runtime.sendMessage({ type: 'CANCEL_ALARM' }, () => {});
     setStatus('Saved!');
+    updateNextTrigger({
+      autoReset: { enabled: autoEnabled },
+      scheduledTrigger: null,
+      usageData: null
+    });
   }
 
   updateDot();
@@ -149,5 +197,6 @@ btnCancel.addEventListener('click', () => {
   chrome.storage.local.set({ autoReset: { enabled: false } });
   chrome.runtime.sendMessage({ type: 'CANCEL_ALARM' }, () => {});
   setStatus('Cancelled.', true);
+  nextTriggerEl.textContent = 'Next trigger at: not set';
   updateDot();
 });

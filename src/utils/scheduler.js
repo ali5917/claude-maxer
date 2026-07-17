@@ -1,7 +1,3 @@
-// ─── scheduler.js ─────────────────────────────────────────────────────────────
-// All scheduling logic: calculating fire times, setting/clearing alarms,
-// persisting daily schedule. Imported by background.js.
-
 const ALARM_NAME = "claude-maxer";
 
 function calcFireTime(workStart, hoursEarly, forceTomorrow = false) {
