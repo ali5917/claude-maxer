@@ -96,8 +96,7 @@
   let lastMessageDelta = null;
   let expectedFinalRequestId = null; // set when we fire the post-message_stop fetch
 
-  // track whether a response is currently streaming, so we can avoid
-  // refetching /usage mid-generation (backend usage may not be caught up yet)
+  // track whether a response is currently streaming, so we can avoid refetching /usage mid-generation
   let isGenerating = false;
 
   // listen for messages from bridge.js 
@@ -127,19 +126,11 @@
           log('captured baseline', promptBaseline);
         }
 
-        // if bridge.js echoes back the requestId we sent, only treat this
-        // response as "final" if it matches the request we fired after
-        // message_stop — otherwise an earlier (message_start) response that
-        // arrives late can get mistaken for the final reading.
         const requestId = data.payload?.requestId;
         const isExpectedFinal = expectedFinalRequestId == null || requestId == null || requestId === expectedFinalRequestId;
 
         if (awaitingFinalUsage && promptBaseline && parsed.five_hour && isExpectedFinal) {
           const finalResetsAtMs = parsed.five_hour.resets_at ? parsed.five_hour.resets_at.getTime() : null;
-          // resets_at is recomputed server-side on each call (e.g. now + 5h), so two
-          // legitimate readings of the *same* window can differ by a few tens/hundreds
-          // of ms of jitter. Only treat it as an actual window rollover if the gap is
-          // large (a real reset shifts this by close to the full window length).
           const RESET_JITTER_TOLERANCE_MS = 60 * 1000; // 1 minute
           const sameWindow =
             promptBaseline.resetsAtMs != null &&
@@ -213,13 +204,11 @@
     if (attempt < 10) setTimeout(() => scheduleAppendDelta(attempt + 1), 300);
   }
 
-  // returns true once handled (appended, already tagged, or nothing to show) — false to retry
   function appendDeltaToLastResponse() {
     if (lastMessageDelta === null) return false;
 
     const text = lastMessageDelta < 0.1 ? '<0.1%' : `${lastMessageDelta.toFixed(1)}%`;
 
-    // primary selector, with fallbacks in case Claude.ai's markup changed
     const bars = document.querySelectorAll('div[data-message-action-bar]');
     if (!bars.length) {
       log('appendDeltaToLastResponse: no action bar found in DOM yet');
