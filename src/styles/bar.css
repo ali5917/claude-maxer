@@ -36,7 +36,7 @@
 }
 .cm-track {
   width: 100%;
-  height: 3px;
+  height: 4px;
   background: rgba(255,255,255,0.12);
   border-radius: 99px;
   overflow: hidden;
@@ -56,8 +56,8 @@
   top: 50%;
   transform: translate(-50%, -50%);
   width: 2px;
-  height: 7px;
-  background: rgba(255,255,255,0.9);
+  height: 10px;
+  background: rgba(189, 216, 214, 0.9);
   border-radius: 1px;
   pointer-events: none;
 }
@@ -73,4 +73,19 @@
   height: 14px;
   background: rgba(255,255,255,0.08);
   flex-shrink: 0;
+}
+
+.cm-msg-cost {
+  font-size: 11px !important;
+  font-weight: 400 !important;
+  line-height: 1 !important;
+  color: rgba(255, 255, 255, 0.45) !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+  padding: 3px 8px !important;
+  border-radius: 999px !important;
+  margin-left: 8px !important;
+  white-space: nowrap !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  text-decoration: none !important;
 }

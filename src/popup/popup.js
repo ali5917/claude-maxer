@@ -7,7 +7,6 @@ const sectionAuto    = document.getElementById('sectionAuto');
 const sectionSched   = document.getElementById('sectionSchedule');
 const btnSave        = document.getElementById('btnSave');
 const btnCancel      = document.getElementById('btnCancel');
-const btnTestNow     = document.getElementById('btnTestNow');
 const statusEl       = document.getElementById('status');
 const statusDot      = document.getElementById('statusDot');
 const lastTriggeredEl = document.getElementById('lastTriggered');
@@ -74,7 +73,7 @@ function updateDot() {
 }
 
 // load saved state
-chrome.storage.local.get(['autoReset', 'scheduledTrigger', 'lastTriggeredAt'], (data) => {
+chrome.storage.sync.get(['autoReset', 'scheduledTrigger', 'lastTriggeredAt'], (data) => {
   if (data.autoReset?.enabled) {
     toggleAuto.checked = true;
     sectionAuto.classList.add('enabled');
@@ -109,7 +108,7 @@ btnSave.addEventListener('click', () => {
   }
 
   // save auto-reset preference
-  chrome.storage.local.set({ autoReset: { enabled: autoEnabled } });
+  chrome.storage.sync.set({ autoReset: { enabled: autoEnabled } });
 
   // handle scheduled alarm
   if (schedEnabled) {
@@ -152,19 +151,3 @@ btnCancel.addEventListener('click', () => {
   setStatus('Cancelled.', true);
   updateDot();
 });
-
-// test Now 
-// btnTestNow.addEventListener('click', async () => {
-//   setStatus('Opening Claude...');
-//   btnTestNow.disabled = true;
-//   try {
-//     await chrome.tabs.create({
-//       url: 'https://claude.ai/new?incognito=1&autostart=1',
-//       active: true
-//     });
-//     setStatus('⚡ Check the Claude tab!');
-//   } catch (e) {
-//     setStatus('Failed to open tab.', true);
-//   }
-//   btnTestNow.disabled = false;
-// });

@@ -83,6 +83,28 @@
     return { five_hour, seven_day };
   }
 
+  // track how much the session window moved between consecutive messages
+  let lastSessionUtil = null;
+  let lastSessionResetsAtMs = null;
+  let lastMessageDelta = null;
+
+  function trackSessionDelta(w) {
+    if (!w) return;
+    const resetsAtMs = w.resets_at ? w.resets_at.getTime() : null;
+    const sameWindow = lastSessionResetsAtMs !== null && lastSessionResetsAtMs === resetsAtMs;
+
+    lastMessageDelta = (sameWindow && lastSessionUtil !== null)
+      ? Math.max(0, w.utilization - lastSessionUtil)
+      : null;
+
+    lastSessionUtil = w.utilization;
+    lastSessionResetsAtMs = resetsAtMs;
+  }
+
+  // track whether a response is currently streaming, so we can avoid
+  // refetching /usage mid-generation (backend usage may not be caught up yet)
+  let isGenerating = false;
+
   // listen for messages from bridge.js 
   window.addEventListener('message', (event) => {
     if (event.source !== window) return;
@@ -91,17 +113,73 @@
 
     if (data.type === 'usage_response') {
       const parsed = parseUsageFromEndpoint(data.payload);
-      if (parsed) updateBar(parsed);
+      if (parsed) {
+        updateBar(parsed);
+        reportUsage(parsed);
+      }
+    }
+
+    if (data.type === 'message_start') {
+      isGenerating = true;
     }
 
     if (data.type === 'message_limit') {
       const parsed = parseUsageFromSSE(data.payload);
       if (parsed) {
+        trackSessionDelta(parsed.five_hour);
         updateBar(parsed);
-        chrome.runtime.sendMessage({ type: 'USAGE_UPDATE', payload: data.payload });
+        reportUsage(parsed);
       }
     }
+
+    if (data.type === 'message_stop') {
+      isGenerating = false;
+      scheduleAppendDelta();
+      setTimeout(fetchUsageOnLoad, 1000); // SSE utilization can lag slightly behind the endpoint's figure
+    }
   });
+
+  // retry a few times since data-is-streaming may flip false slightly after message_stop fires
+  function scheduleAppendDelta(attempt = 0) {
+    if (appendDeltaToLastResponse()) return;
+    if (attempt < 10) setTimeout(() => scheduleAppendDelta(attempt + 1), 300);
+  }
+
+  // append "+X% session" next to the message action bar (copy/retry/feedback buttons)
+  // returns true once handled (appended, already tagged, or nothing to show) — false to retry
+  function appendDeltaToLastResponse() {
+    if (lastMessageDelta === null) return true;
+
+    const text = lastMessageDelta < 0.1 ? '<0.1%' : `${lastMessageDelta.toFixed(1)}%`;
+
+    const bars = document.querySelectorAll('div[data-message-action-bar]');
+    if (!bars.length) return false;
+    const last = bars[bars.length - 1];
+    if (last.querySelector('.cm-msg-cost')) return true; // already tagged
+
+    const el = document.createElement('span');
+    el.className = 'cm-msg-cost';
+    el.textContent = `+${text} session`;
+    last.appendChild(el);
+    return true;
+  }
+
+  // send normalized usage to background, same shape regardless of source
+  function reportUsage(parsed) {
+    chrome.runtime.sendMessage({
+      type: 'USAGE_UPDATE',
+      payload: {
+        five_hour: parsed.five_hour ? {
+          utilization: parsed.five_hour.utilization,
+          resets_at: parsed.five_hour.resets_at ? parsed.five_hour.resets_at.getTime() : null
+        } : null,
+        seven_day: parsed.seven_day ? {
+          utilization: parsed.seven_day.utilization,
+          resets_at: parsed.seven_day.resets_at ? parsed.seven_day.resets_at.getTime() : null
+        } : null
+      }
+    });
+  }
 
   // format time remaining 
   function formatTimeRemaining(date) {
@@ -115,6 +193,18 @@
     if (days > 0)  return `${days}d ${hours}h`;
     if (hours > 0) return `${hours}h ${mins}m`;
     return `${mins}m`;
+  }
+
+  // compute where we are inside the usage window (0-100)
+  function getWindowProgressPct(w) {
+    if (!w?.resets_at || typeof w.window_hours !== 'number' || w.window_hours <= 0) {
+      return null;
+    }
+
+    const totalMs = w.window_hours * 60 * 60 * 1000;
+    const remainingMs = w.resets_at - Date.now();
+    const elapsedPct = 100 - (remainingMs / totalMs) * 100;
+    return Math.max(0, Math.min(100, elapsedPct));
   }
 
   // create bar element 
@@ -177,7 +267,8 @@
       fill.className = 'cm-fill' +
         (pct >= 90 ? ' cm-critical' : pct >= 70 ? ' cm-warn' : '');
 
-      if (marker) marker.style.left = pct + '%';
+      const markerPct = getWindowProgressPct(w);
+      if (marker) marker.style.left = (markerPct ?? pct) + '%';
 
       const timeStr = formatTimeRemaining(w.resets_at);
       meta.textContent = timeStr
@@ -202,20 +293,18 @@
     if (location.pathname !== lastPath) {
       lastPath = location.pathname;
       setTimeout(() => {
-        fetchUsageOnLoad();
-        if (window._cmLastUsage) setTimeout(() => attachBar(), 500);
+        if (!isGenerating || !window._cmLastUsage) fetchUsageOnLoad(); // always fetch if we have nothing cached yet
+        if (window._cmLastUsage) setTimeout(() => { attachBar(); renderBar(window._cmLastUsage); }, 500);
       }, 1500);
     }
     if (!document.getElementById('cm-bar') && window._cmLastUsage) {
       const anchor = document.querySelector('[data-testid="model-selector-dropdown"]');
-      if (anchor) attachBar();
+      if (anchor) { attachBar(); renderBar(window._cmLastUsage); }
     }
   }).observe(document.body, { childList: true, subtree: true });
 
   // autostart: send "hi" to trigger reset 
   if (!window.location.search.includes('autostart=1')) return;
-
-  console.log('[Claude Maxer] Autostart active');
 
   const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -253,7 +342,6 @@
           key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true
         }));
       }
-      console.log('[Claude Maxer] Message sent!');
       chrome.runtime.sendMessage({ type: 'CLOSE_TAB' });
       break;
     }

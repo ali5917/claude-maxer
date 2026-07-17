@@ -45,6 +45,12 @@
             if (json?.type === 'message_limit' && json.message_limit) {
               post('message_limit', json.message_limit);
             }
+            if (json?.type === 'message_start') {
+              post('message_start', null);
+            }
+            if (json?.type === 'message_stop') {
+              post('message_stop', null);
+            }
           } catch { /* ignore */ }
         }
       }
@@ -73,7 +79,7 @@
         return;
       }
     } catch (e) {
-      console.warn('[Claude Maxer] Bridge request failed:', e);
+        
     }
   });
 
