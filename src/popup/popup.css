@@ -145,6 +145,19 @@ body {
     line-height: 1.35;
 }
 
+.trigger-note {
+    margin-top: 10px;
+    margin-bottom: 10px;
+    padding: 8px 15px;
+    border-top: 1px solid #d5e1df;
+    color: #64748b;
+    font-size: 10px;
+    line-height: 1.35;
+    text-align: center;
+    font-weight: 500;
+
+}
+
 label.field-label {
   display: block;
   font-size: 11px;

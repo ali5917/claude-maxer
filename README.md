@@ -28,17 +28,7 @@ A Chrome extension for [claude.ai](https://claude.ai) that shows your live usage
 
 To update later, re-download and click the reload icon on the extension's card in `chrome://extensions`. After updating, also refresh any open claude.ai tabs.
 
-## Permissions
-
-| Permission | Why it's needed |
-|---|---|
-| `cookies` | Reads the `lastActiveOrg` cookie on claude.ai to know which organization's usage endpoint to query. |
-| `storage` | Saves your settings (auto-reset toggle, schedule, last usage snapshot) locally/synced across your signed-in Chrome. |
-| `alarms` | Powers the auto-reset and scheduled-trigger timers. |
-| `notifications` | Shows a system notification when a trigger succeeds or fails. |
-| `tabs` | Opens/closes the Claude tab used by auto-reset and the scheduled trigger. |
-| Host access to `https://claude.ai/*` | The extension only ever runs on claude.ai. |
-
+## Note:
 No data leaves your browser. Nothing is sent to any server other than claude.ai itself (which your browser was already talking to).
 
 <!-- ## Credits
