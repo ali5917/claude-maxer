@@ -31,6 +31,6 @@ To update later, re-download and click the reload icon on the extension's card i
 ## Note:
 No data leaves your browser. Nothing is sent to any server other than claude.ai itself (which your browser was already talking to).
 
-<!-- ## Credits
+## Credits
 
-Inspired by [Claude Counter](https://github.com/she-llac/claude-counter) by she-llac -->
+Inspired by [Claude Counter](https://github.com/she-llac/claude-counter) by she-llac
