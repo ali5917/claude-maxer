@@ -6,8 +6,8 @@ A Chrome extension for [claude.ai](https://claude.ai) that shows your live usage
 
 ## Features
 
-- **Live usage bar** injected into the Claude.ai UI, showing both the 5-hour session window and the 7-day weekly window.
-- **Toolbar badge** showsn live session usage %, so you can check usage without even opening a tab.
+- **Live usage bar** shows both the 5-hour session window and the 7-day weekly window.
+- **Toolbar badge** shows live session usage %, so you can check usage without even opening a tab.
 - **Per-message cost** tag appears at the end of the response showing how much session that specific message used (at least 2 messages in the chat needed).
 - **Real-time updates** from Claude's own SSE stream.
 - **Auto-reset mode** waits for your current session window to end, then opens a fresh incognito Claude tab automatically.
