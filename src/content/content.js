@@ -7,6 +7,8 @@
   'use strict';
 
   const MARKER = 'ClaudeMaxer';
+  const DEBUG = true; // set to false once delta tracking is confirmed working
+  const log = (...args) => { if (DEBUG) console.log('[ClaudeMaxer]', ...args); };
 
   // inject shared bar stylesheet 
   function injectBarStyles() {
@@ -43,10 +45,15 @@
   }
 
   // ask bridge to hit /usage endpoint
+  // returns a requestId so callers can tell which response is "theirs"
+  // (bridge.js should echo payload.requestId back on usage_response if present)
+  let requestCounter = 0;
   function fetchUsageOnLoad() {
     const orgId = getOrgIdFromCookie();
-    if (!orgId) return;
-    window.postMessage({ marker: MARKER, type: 'request', kind: 'usage', payload: { orgId } }, '*');
+    if (!orgId) return null;
+    const requestId = ++requestCounter;
+    window.postMessage({ marker: MARKER, type: 'request', kind: 'usage', payload: { orgId, requestId } }, '*');
+    return requestId;
   }
 
   // parse usage from /usage endpoint — utilization 0-100, resets_at ISO string
@@ -83,23 +90,11 @@
     return { five_hour, seven_day };
   }
 
-  // track how much the session window moved between consecutive messages
-  let lastSessionUtil = null;
-  let lastSessionResetsAtMs = null;
+  let promptBaseline = null; // {utilization, resetsAtMs}
+  let captureBaselineFromNextUsageResponse = false;
+  let awaitingFinalUsage = false;
   let lastMessageDelta = null;
-
-  function trackSessionDelta(w) {
-    if (!w) return;
-    const resetsAtMs = w.resets_at ? w.resets_at.getTime() : null;
-    const sameWindow = lastSessionResetsAtMs !== null && lastSessionResetsAtMs === resetsAtMs;
-
-    lastMessageDelta = (sameWindow && lastSessionUtil !== null)
-      ? Math.max(0, w.utilization - lastSessionUtil)
-      : null;
-
-    lastSessionUtil = w.utilization;
-    lastSessionResetsAtMs = resetsAtMs;
-  }
+  let expectedFinalRequestId = null; // set when we fire the post-message_stop fetch
 
   // track whether a response is currently streaming, so we can avoid
   // refetching /usage mid-generation (backend usage may not be caught up yet)
@@ -113,29 +108,102 @@
 
     if (data.type === 'usage_response') {
       const parsed = parseUsageFromEndpoint(data.payload);
+      log('usage_response', {
+        requestId: data.payload?.requestId,
+        expectedFinalRequestId,
+        awaitingFinalUsage,
+        promptBaseline,
+        parsedFiveHour: parsed?.five_hour
+      });
       if (parsed) {
         updateBar(parsed);
         reportUsage(parsed);
+        if (captureBaselineFromNextUsageResponse && parsed.five_hour) {
+          promptBaseline = {
+            utilization: parsed.five_hour.utilization,
+            resetsAtMs: parsed.five_hour.resets_at ? parsed.five_hour.resets_at.getTime() : null
+          };
+          captureBaselineFromNextUsageResponse = false;
+          log('captured baseline', promptBaseline);
+        }
+
+        // if bridge.js echoes back the requestId we sent, only treat this
+        // response as "final" if it matches the request we fired after
+        // message_stop — otherwise an earlier (message_start) response that
+        // arrives late can get mistaken for the final reading.
+        const requestId = data.payload?.requestId;
+        const isExpectedFinal = expectedFinalRequestId == null || requestId == null || requestId === expectedFinalRequestId;
+
+        if (awaitingFinalUsage && promptBaseline && parsed.five_hour && isExpectedFinal) {
+          const finalResetsAtMs = parsed.five_hour.resets_at ? parsed.five_hour.resets_at.getTime() : null;
+          // resets_at is recomputed server-side on each call (e.g. now + 5h), so two
+          // legitimate readings of the *same* window can differ by a few tens/hundreds
+          // of ms of jitter. Only treat it as an actual window rollover if the gap is
+          // large (a real reset shifts this by close to the full window length).
+          const RESET_JITTER_TOLERANCE_MS = 60 * 1000; // 1 minute
+          const sameWindow =
+            promptBaseline.resetsAtMs != null &&
+            finalResetsAtMs != null &&
+            Math.abs(promptBaseline.resetsAtMs - finalResetsAtMs) < RESET_JITTER_TOLERANCE_MS;
+
+          if (sameWindow) {
+            lastMessageDelta = Math.max(0, parsed.five_hour.utilization - promptBaseline.utilization);
+          } else {
+            lastMessageDelta = null;
+            log('reset window changed mid-message, dropping delta', { baseline: promptBaseline.resetsAtMs, final: finalResetsAtMs });
+          }
+          awaitingFinalUsage = false;
+          expectedFinalRequestId = null;
+          promptBaseline = null;
+          log('computed delta', lastMessageDelta);
+          scheduleAppendDelta();
+        } else if (awaitingFinalUsage && !isExpectedFinal) {
+          log('ignoring stale usage_response while awaiting final', { requestId, expectedFinalRequestId });
+        }
       }
     }
 
     if (data.type === 'message_start') {
+      log('message_start');
       isGenerating = true;
+      awaitingFinalUsage = false;
+      expectedFinalRequestId = null;
+      lastMessageDelta = null;
+
+      if (window._cmLastUsage?.five_hour) {
+        promptBaseline = {
+          utilization: window._cmLastUsage.five_hour.utilization,
+          resetsAtMs: window._cmLastUsage.five_hour.resets_at ? window._cmLastUsage.five_hour.resets_at.getTime() : null
+        };
+        captureBaselineFromNextUsageResponse = false;
+        log('baseline from cache', promptBaseline);
+      } else {
+        promptBaseline = null;
+        captureBaselineFromNextUsageResponse = true;
+        log('no cached usage yet, will capture baseline from next response');
+      }
+
+      fetchUsageOnLoad();
+    }
+
+    if (data.type === 'message_stop') {
+      log('message_stop');
+      isGenerating = false;
+      awaitingFinalUsage = true;
+      // SSE utilization can lag slightly behind the endpoint's figure
+      setTimeout(() => {
+        expectedFinalRequestId = fetchUsageOnLoad();
+        log('fired final usage fetch', expectedFinalRequestId);
+      }, 1000);
     }
 
     if (data.type === 'message_limit') {
       const parsed = parseUsageFromSSE(data.payload);
+      log('message_limit (SSE)', parsed?.five_hour);
       if (parsed) {
-        trackSessionDelta(parsed.five_hour);
         updateBar(parsed);
         reportUsage(parsed);
       }
-    }
-
-    if (data.type === 'message_stop') {
-      isGenerating = false;
-      scheduleAppendDelta();
-      setTimeout(fetchUsageOnLoad, 1000); // SSE utilization can lag slightly behind the endpoint's figure
     }
   });
 
@@ -145,22 +213,26 @@
     if (attempt < 10) setTimeout(() => scheduleAppendDelta(attempt + 1), 300);
   }
 
-  // append "+X% session" next to the message action bar (copy/retry/feedback buttons)
   // returns true once handled (appended, already tagged, or nothing to show) — false to retry
   function appendDeltaToLastResponse() {
-    if (lastMessageDelta === null) return true;
+    if (lastMessageDelta === null) return false;
 
     const text = lastMessageDelta < 0.1 ? '<0.1%' : `${lastMessageDelta.toFixed(1)}%`;
 
+    // primary selector, with fallbacks in case Claude.ai's markup changed
     const bars = document.querySelectorAll('div[data-message-action-bar]');
-    if (!bars.length) return false;
+    if (!bars.length) {
+      log('appendDeltaToLastResponse: no action bar found in DOM yet');
+      return false;
+    }
     const last = bars[bars.length - 1];
-    if (last.querySelector('.cm-msg-cost')) return true; // already tagged
+    if (last.querySelector('.cm-msg-cost')) return true;
 
     const el = document.createElement('span');
     el.className = 'cm-msg-cost';
     el.textContent = `+${text} session`;
     last.appendChild(el);
+    log('appended delta to action bar', text);
     return true;
   }
 
@@ -332,7 +404,7 @@
       editor.click();
       await sleep(200);
       document.execCommand('selectAll', false, null);
-      document.execCommand('insertText', false, 'claude maxer saying hi');
+      document.execCommand('insertText', false, 'hi');
       await sleep(300);
       const sendBtn = findSendButton();
       if (sendBtn && !sendBtn.disabled) {
