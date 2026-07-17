@@ -18,7 +18,7 @@ A Chrome extension for [claude.ai](https://claude.ai) that shows your live usage
 
 ## Installation
 
-1. **Download ZIP**, then extract it somewhere
+1. **Download [claude-maxer](https://github.com/ali5917/claude-maxer/archive/refs/heads/main.zip)**, then extract it somewhere
 2. Open Chrome and go to `chrome://extensions`.
 3. Turn on **Developer mode** using the toggle in the top-right corner.
 4. Click **Load unpacked**.
@@ -26,7 +26,7 @@ A Chrome extension for [claude.ai](https://claude.ai) that shows your live usage
 6. Pin the extension to your toolbar so you can see the usage badge.
 7. Open [claude.ai](https://claude.ai). The usage bar should appear automatically.
 
-To update later, ee-download the ZIP and click the reload icon on the extension's card in `chrome://extensions`. After updating, also refresh any open claude.ai tabs.
+To update later, re-download and click the reload icon on the extension's card in `chrome://extensions`. After updating, also refresh any open claude.ai tabs.
 
 ## Permissions
 
