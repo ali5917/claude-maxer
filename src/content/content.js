@@ -1,0 +1,264 @@
+// inject bridge.js into page context to intercept fetch
+// fetch usage on page load via /usage endpoint (shows bar immediately)
+// update bar from SSE message_limit events (real-time updates after messages)
+// handle ?autostart=1 to send "hi" and trigger the reset
+
+(() => {
+  'use strict';
+
+  const MARKER = 'ClaudeMaxer';
+
+  // inject shared bar stylesheet 
+  function injectBarStyles() {
+    if (document.getElementById('cm-bar-styles')) return;
+    const link = document.createElement('link');
+    link.id = 'cm-bar-styles';
+    link.rel = 'stylesheet';
+    link.href = chrome.runtime.getURL('src/styles/bar.css');
+    (document.head || document.documentElement).appendChild(link);
+  }
+
+  injectBarStyles();
+
+  // inject bridge into page context 
+  function injectBridge() {
+    if (document.getElementById('cm-bridge')) return;
+    const script = document.createElement('script');
+    script.id = 'cm-bridge';
+    script.src = chrome.runtime.getURL('src/injected/bridge.js');
+    script.onload = () => setTimeout(fetchUsageOnLoad, 300);
+    (document.head || document.documentElement).appendChild(script);
+  }
+
+  injectBridge();
+
+  // get org ID from cookie 
+  function getOrgIdFromCookie() {
+    try {
+      return document.cookie
+        .split('; ')
+        .find(row => row.startsWith('lastActiveOrg='))
+        ?.split('=')[1] || null;
+    } catch { return null; }
+  }
+
+  // ask bridge to hit /usage endpoint
+  function fetchUsageOnLoad() {
+    const orgId = getOrgIdFromCookie();
+    if (!orgId) return;
+    window.postMessage({ marker: MARKER, type: 'request', kind: 'usage', payload: { orgId } }, '*');
+  }
+
+  // parse usage from /usage endpoint — utilization 0-100, resets_at ISO string
+  function parseUsageFromEndpoint(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    function parseWindow(w, hours) {
+      if (!w || typeof w.utilization !== 'number') return null;
+      return {
+        utilization: Math.max(0, Math.min(100, w.utilization)),
+        resets_at: typeof w.resets_at === 'string' ? new Date(w.resets_at) : null,
+        window_hours: hours
+      };
+    }
+    const five_hour = parseWindow(raw.five_hour, 5);
+    const seven_day = parseWindow(raw.seven_day, 168);
+    if (!five_hour && !seven_day) return null;
+    return { five_hour, seven_day };
+  }
+
+  // parse usage from SSE — utilization 0-1, resets_at Unix timestamp
+  function parseUsageFromSSE(raw) {
+    if (!raw?.windows) return null;
+    function parseWindow(w, hours) {
+      if (!w || typeof w.utilization !== 'number') return null;
+      return {
+        utilization: Math.max(0, Math.min(100, w.utilization * 100)),
+        resets_at: typeof w.resets_at === 'number' ? new Date(w.resets_at * 1000) : null,
+        window_hours: hours
+      };
+    }
+    const five_hour = parseWindow(raw.windows['5h'], 5);
+    const seven_day = parseWindow(raw.windows['7d'], 168);
+    if (!five_hour && !seven_day) return null;
+    return { five_hour, seven_day };
+  }
+
+  // listen for messages from bridge.js 
+  window.addEventListener('message', (event) => {
+    if (event.source !== window) return;
+    const data = event.data;
+    if (!data || data.marker !== MARKER) return;
+
+    if (data.type === 'usage_response') {
+      const parsed = parseUsageFromEndpoint(data.payload);
+      if (parsed) updateBar(parsed);
+    }
+
+    if (data.type === 'message_limit') {
+      const parsed = parseUsageFromSSE(data.payload);
+      if (parsed) {
+        updateBar(parsed);
+        chrome.runtime.sendMessage({ type: 'USAGE_UPDATE', payload: data.payload });
+      }
+    }
+  });
+
+  // format time remaining 
+  function formatTimeRemaining(date) {
+    if (!date) return null;
+    const ms = date - Date.now();
+    if (ms <= 0) return 'now';
+    const totalMins = Math.floor(ms / 60000);
+    const days  = Math.floor(totalMins / 1440);
+    const hours = Math.floor((totalMins % 1440) / 60);
+    const mins  = totalMins % 60;
+    if (days > 0)  return `${days}d ${hours}h`;
+    if (hours > 0) return `${hours}h ${mins}m`;
+    return `${mins}m`;
+  }
+
+  // create bar element 
+  function createBar() {
+    const el = document.createElement('div');
+    el.id = 'cm-bar';
+    el.innerHTML = `
+      <div class="cm-segment">
+        <span class="cm-label">Session</span>
+        <span class="cm-trackwrap">
+          <span class="cm-track"><span class="cm-fill" id="cm-session-fill"></span></span>
+          <span class="cm-marker" id="cm-session-marker"></span>
+        </span>
+        <span class="cm-meta" id="cm-session-meta"></span>
+      </div>
+      <div class="cm-divider"></div>
+      <div class="cm-segment">
+        <span class="cm-label">Weekly</span>
+        <span class="cm-trackwrap">
+          <span class="cm-track"><span class="cm-fill" id="cm-weekly-fill"></span></span>
+          <span class="cm-marker" id="cm-weekly-marker"></span>
+        </span>
+        <span class="cm-meta" id="cm-weekly-meta"></span>
+      </div>
+    `;
+    return el;
+  }
+
+  // attach bar below the toolbar
+  function attachBar() {
+    if (document.getElementById('cm-bar')) return;
+
+    const anchor = document.querySelector('[data-testid="model-selector-dropdown"]');
+    if (!anchor) return;
+
+    const toolbar = anchor.closest('div[class*="flex"]')?.parentElement;
+    if (!toolbar) return;
+
+    const bar = createBar();
+    toolbar.parentElement.insertBefore(bar, toolbar.nextSibling);
+
+    if (!window._cmTick) {
+      window._cmTick = setInterval(() => {
+        if (window._cmLastUsage) renderBar(window._cmLastUsage);
+      }, 30000);
+    }
+  }
+
+  // render usage into bar
+  function renderBar(usage) {
+    function updateSegment(fillId, markerId, metaId, w) {
+      if (!w) return;
+      const fill   = document.getElementById(fillId);
+      const marker = document.getElementById(markerId);
+      const meta   = document.getElementById(metaId);
+      if (!fill || !meta) return;
+
+      const pct = Math.min(100, w.utilization);
+      fill.style.width = pct + '%';
+      fill.className = 'cm-fill' +
+        (pct >= 90 ? ' cm-critical' : pct >= 70 ? ' cm-warn' : '');
+
+      if (marker) marker.style.left = pct + '%';
+
+      const timeStr = formatTimeRemaining(w.resets_at);
+      meta.textContent = timeStr
+        ? `${Math.round(pct)}% · resets in ${timeStr}`
+        : `${Math.round(pct)}%`;
+    }
+
+    updateSegment('cm-session-fill', 'cm-session-marker', 'cm-session-meta', usage.five_hour);
+    updateSegment('cm-weekly-fill',  'cm-weekly-marker',  'cm-weekly-meta',  usage.seven_day);
+  }
+
+  // update bar (attach if needed, then render)
+  function updateBar(usage) {
+    window._cmLastUsage = usage;
+    attachBar();
+    renderBar(usage);
+  }
+
+  // re-attach on SPA navigation 
+  let lastPath = location.pathname;
+  new MutationObserver(() => {
+    if (location.pathname !== lastPath) {
+      lastPath = location.pathname;
+      setTimeout(() => {
+        fetchUsageOnLoad();
+        if (window._cmLastUsage) setTimeout(() => attachBar(), 500);
+      }, 1500);
+    }
+    if (!document.getElementById('cm-bar') && window._cmLastUsage) {
+      const anchor = document.querySelector('[data-testid="model-selector-dropdown"]');
+      if (anchor) attachBar();
+    }
+  }).observe(document.body, { childList: true, subtree: true });
+
+  // autostart: send "hi" to trigger reset 
+  if (!window.location.search.includes('autostart=1')) return;
+
+  console.log('[Claude Maxer] Autostart active');
+
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+  function findEditor() {
+    return (
+      document.querySelector("[data-testid='chat-input']") ||
+      document.querySelector('.tiptap.ProseMirror') ||
+      document.querySelector("div[contenteditable='true']")
+    );
+  }
+
+  function findSendButton() {
+    return document.querySelector("button[aria-label='Send message']");
+  }
+
+  (async () => {
+    let elapsed = 0;
+    while (elapsed < 20000) {
+      await sleep(500);
+      elapsed += 500;
+      const editor = findEditor();
+      if (!editor) continue;
+      await sleep(1500);
+      editor.focus();
+      editor.click();
+      await sleep(200);
+      document.execCommand('selectAll', false, null);
+      document.execCommand('insertText', false, 'hi');
+      await sleep(300);
+      const sendBtn = findSendButton();
+      if (sendBtn && !sendBtn.disabled) {
+        sendBtn.click();
+      } else {
+        editor.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true
+        }));
+      }
+      console.log('[Claude Maxer] Message sent!');
+      chrome.runtime.sendMessage({ type: 'CLOSE_TAB' });
+      break;
+    }
+    if (elapsed >= 20000) {
+      chrome.runtime.sendMessage({ type: 'SEND_FAILED', reason: 'Editor not found.' });
+    }
+  })();
+})();

@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+
+  <div class="header">
+    <div class="header-dot" id="statusDot"></div>
+    <h3>Claude Maxer</h3>
+  </div>
+
+  <!-- Auto-reset section -->
+  <div class="section" id="sectionAuto">
+    <div class="section-header">
+      <div>
+        <div class="section-title">Auto Reset</div>
+        <div class="section-desc">Fires a new window when current one ends</div>
+      </div>
+      <label class="toggle">
+        <input type="checkbox" id="toggleAuto" />
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+  </div>
+
+  <div class="divider">or</div>
+
+  <!-- Scheduled section -->
+  <div class="section" id="sectionSchedule">
+    <div class="section-header">
+      <div>
+        <div class="section-title">Scheduled Trigger</div>
+        <div class="section-desc">Fire at a specific time on selected days</div>
+      </div>
+      <label class="toggle">
+        <input type="checkbox" id="toggleSchedule" />
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+    <div class="section-body" id="scheduleBody">
+      <label class="field-label">Time</label>
+      <input type="time" id="triggerTime" value="14:00" />
+      <label class="field-label">Days</label>
+      <div class="days">
+        <div class="day-btn selected" data-day="1">M</div>
+        <div class="day-btn selected" data-day="2">T</div>
+        <div class="day-btn selected" data-day="3">W</div>
+        <div class="day-btn selected" data-day="4">T</div>
+        <div class="day-btn selected" data-day="5">F</div>
+        <div class="day-btn" data-day="6">S</div>
+        <div class="day-btn" data-day="0">S</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="btn-row">
+    <button id="btnSave">Save</button>
+    <button id="btnCancel">Cancel</button>
+  </div>
+
+  <!-- <button id="btnTestNow">⚡ Test Now</button> -->
+
+  <div id="status"></div>
+  <div id="lastTriggered"></div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

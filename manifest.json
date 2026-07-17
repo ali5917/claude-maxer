@@ -2,14 +2,14 @@
   "manifest_version": 3,
   "name": "Claude Maxer",
   "version": "1.0.0",
-  "description": "Automatically triggers your Claude usage window reset so you get more out of your session.",
+  "description": "Automatically triggers your Claude usage window reset and shows real-time session usage on claude.ai.",
   "permissions": ["alarms", "tabs", "storage", "scripting", "notifications"],
   "host_permissions": ["https://claude.ai/*"],
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "src/background/background.js"
   },
   "action": {
-    "default_popup": "popup/popup.html",
+    "default_popup": "src/popup/popup.html",
     "default_icon": {
       "16": "icons/icon16.png",
       "48": "icons/icon48.png",
@@ -19,8 +19,14 @@
   "content_scripts": [
     {
       "matches": ["https://claude.ai/*"],
-      "js": ["content.js"],
+      "js": ["src/content/content.js"],
       "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["src/injected/bridge.js", "src/styles/bar.css"],
+      "matches": ["https://claude.ai/*"]
     }
   ],
   "icons": {
