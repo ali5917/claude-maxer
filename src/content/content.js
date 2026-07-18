@@ -7,8 +7,8 @@
   'use strict';
 
   const MARKER = 'ClaudeMaxer';
-  const DEBUG = true; // set to false once delta tracking is confirmed working
-  const log = (...args) => { if (DEBUG) console.log('[ClaudeMaxer]', ...args); };
+  const DEBUG = false
+  const log = (...args) => { if (DEBUG) console.log('ClaudeMaxer', ...args); };
 
   // inject shared bar stylesheet 
   function injectBarStyles() {
@@ -99,6 +99,77 @@
   // track whether a response is currently streaming, so we can avoid refetching /usage mid-generation
   let isGenerating = false;
 
+  // token estimate — lazy-loaded tokenizer, only parsed once, only if this feature is used
+  let tokenizerPromise = null;
+  function getTokenizer() {
+    if (!tokenizerPromise) {
+      tokenizerPromise = import(chrome.runtime.getURL('src/vendor/o200k_base.js')).then(m => m.encode);
+    }
+    return tokenizerPromise;
+  }
+
+  let cmLastMsgTokens = null;
+
+  function formatTokenCount(n) {
+    return n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n);
+  }
+
+  function getTitleBarContainer() {
+    const titleSplit = document.querySelector('[data-testid="chat-title-split"]');
+    return titleSplit ? titleSplit.parentElement?.parentElement : null;
+  }
+
+  function renderTokenBadge() {
+    const container = getTitleBarContainer();
+    if (!container) return;
+
+    let badge = document.getElementById('cm-token-badge');
+    if (!badge) {
+      badge = document.createElement('span');
+      badge.id = 'cm-token-badge';
+      badge.className = 'cm-token-badge';
+      container.appendChild(badge);
+    }
+
+    if (cmLastMsgTokens === null) return;
+
+    badge.textContent = `~${formatTokenCount(cmLastMsgTokens)} tokens used by last response`;
+    badge.title = "Estimated tokens used by last response";
+  }
+
+  function getLastResponseText(actionBarEl) {
+    const group = actionBarEl.closest('[data-is-streaming]') || actionBarEl.closest('.group');
+    if (!group) return '';
+    const body = group.querySelector('.font-claude-response');
+    return (body || group).textContent || '';
+  }
+
+  // retry a few times since the response DOM may still be settling right after message_stop
+  function scheduleTokenEstimate(attempt = 0) {
+    const bars = document.querySelectorAll('div[data-message-action-bar]');
+    const lastBar = bars[bars.length - 1];
+    const text = lastBar ? getLastResponseText(lastBar) : '';
+
+    if (!text) {
+      if (attempt < 10) setTimeout(() => scheduleTokenEstimate(attempt + 1), 300);
+      return;
+    }
+
+    estimateAndDisplayTokens(text);
+  }
+
+  async function estimateAndDisplayTokens(text) {
+    try {
+      const encode = await getTokenizer();
+      const count = encode(text).length;
+      cmLastMsgTokens = count;
+      renderTokenBadge();
+      log('token estimate', { thisMessage: count }); 
+    } catch (e) {
+      console.warn('Claude Maxer Token estimate failed:', e);
+    }
+  }
+
   // listen for messages from bridge.js 
   window.addEventListener('message', (event) => {
     if (event.source !== window) return;
@@ -181,6 +252,7 @@
       log('message_stop');
       isGenerating = false;
       awaitingFinalUsage = true;
+      scheduleTokenEstimate();
       // SSE utilization can lag slightly behind the endpoint's figure
       setTimeout(() => {
         expectedFinalRequestId = fetchUsageOnLoad();
@@ -353,6 +425,10 @@
   new MutationObserver(() => {
     if (location.pathname !== lastPath) {
       lastPath = location.pathname;
+
+      cmLastMsgTokens = null;
+      document.getElementById('cm-token-badge')?.remove();
+
       setTimeout(() => {
         if (!isGenerating || !window._cmLastUsage) fetchUsageOnLoad(); // always fetch if we have nothing cached yet
         if (window._cmLastUsage) setTimeout(() => { attachBar(); renderBar(window._cmLastUsage); }, 500);

@@ -88,4 +88,21 @@
   display: inline-flex !important;
   align-items: center !important;
   text-decoration: none !important;
+  border: 1px solid #D97757 !important; 
+}
+
+.cm-token-badge {
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.06);
+  padding: 3px 8px;
+  border-radius: 999px;
+  margin-left: 10px;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  border: 1px solid #D97757;
 }
