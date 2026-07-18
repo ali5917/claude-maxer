@@ -2,14 +2,14 @@
 
 A Chrome extension for [claude.ai](https://claude.ai) that shows your live usage limits right in the page, adds a toolbar badge, tracks per-message cost, and can automatically open a fresh session when your usage window resets.
 
-![Claude Maxer banner](assets/banner.png)
+![Claude Maxer banner](assets/banner1.png)
 
 ## Features
 
 - **Live usage bar** shows both the 5-hour session window and the 7-day weekly window.
 - **Toolbar badge** shows live session usage %, so you can check usage without even opening a tab.
 - **Per-message cost** tag appears at the end of the response showing how much session that specific message used (at least 2 messages in the chat needed).
-- **Real-time updates** from Claude's own SSE stream.
+- **Token estimate** shows an approximate GPT-tokenizer-based token count for Claude's most recent reply (an "estimated" count, since claude.ai doesn't expose real token usage to the page).
 - **Auto-reset mode** waits for your current session window to end, then opens a fresh incognito Claude tab automatically.
 - **Scheduled trigger** fires at a specific time on chosen days instead of waiting for a natural reset.
 - **Notifications** for successful triggers and failures.
