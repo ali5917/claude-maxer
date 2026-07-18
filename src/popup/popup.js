@@ -10,6 +10,8 @@ const statusEl       = document.getElementById('status');
 const statusDot      = document.getElementById('statusDot');
 const nextTriggerEl  = document.getElementById('nextTrigger');
 const lastTriggeredEl = document.getElementById('lastTriggered');
+const btnUpdate = document.getElementById('btnUpdate');
+const REPO_URL = 'https://github.com/ali5917/claude-maxer';
 
 // day picker 
 const dayBtns = document.querySelectorAll('.day-btn');
@@ -199,4 +201,21 @@ btnCancel.addEventListener('click', () => {
   setStatus('Cancelled.', true);
   nextTriggerEl.textContent = 'Next trigger at: not set';
   updateDot();
+});
+
+// update button
+chrome.storage.sync.get('updateInfo', ({ updateInfo }) => {
+  if (updateInfo?.updateAvailable) {
+    btnUpdate.textContent = `Get Newer Release (v${updateInfo.latestVersion})`;
+    btnUpdate.classList.add('update-available');
+  }
+});
+
+btnUpdate.addEventListener('click', () => {
+  chrome.storage.sync.get('updateInfo', ({ updateInfo }) => {
+    const url = updateInfo?.updateAvailable
+      ? 'https://github.com/ali5917/claude-maxer/archive/refs/heads/main.zip'
+      : 'https://github.com/ali5917/claude-maxer';
+    chrome.tabs.create({ url });
+  });
 });

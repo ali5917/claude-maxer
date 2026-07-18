@@ -289,3 +289,19 @@ button:disabled {
   text-align: center;
   margin-top: 6px;
 }
+
+.update-btn {
+  width: 100%;
+  margin-top: 10px;
+  background: #ffffff;
+  color: #6b7280;
+  border: 1px solid #2c3e50;
+  font-size: 11px;
+}
+
+.update-btn.update-available {
+  background: #ecfdf5;
+  border-color: #86efac;
+  color: #16a34a;
+  font-weight: 600;
+}

@@ -3,6 +3,9 @@
 importScripts('../utils/scheduler.js', '../utils/notifications.js');
 
 const CLAUDE_URL = 'https://claude.ai/new?incognito=1&autostart=1';
+const GITHUB_REPO = 'ali5917/claude-maxer';
+const GITHUB_BRANCH = 'main';
+const MANIFEST_RAW_URL = `https://raw.githubusercontent.com/${GITHUB_REPO}/${GITHUB_BRANCH}/manifest.json`;
 
 // alarm fired 
 chrome.alarms.onAlarm.addListener(async (alarm) => {
@@ -84,6 +87,26 @@ function updateBadge(payload) {
   chrome.action.setBadgeBackgroundColor({
     color: pct >= 90 ? '#e85a4a' : pct >= 70 ? '#e8a06a' : '#5a9fd4'
   });
+}
+
+async function checkForUpdate() {
+  try {
+    const res = await fetch(MANIFEST_RAW_URL, { cache: 'no-store' });
+    if (!res.ok) return;
+    const remoteManifest = await res.json();
+    const latestVersion = remoteManifest?.version;
+    const currentVersion = chrome.runtime.getManifest().version;
+
+    await chrome.storage.sync.set({
+      updateInfo: {
+        updateAvailable: !!latestVersion && latestVersion !== currentVersion,
+        latestVersion: latestVersion || null,
+        checkedAt: Date.now()
+      }
+    });
+  } catch (e) {
+    // network failure — silently skip, next scheduled check retries
+  }
 }
 
 // auto-reset logic 
