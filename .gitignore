@@ -5,3 +5,4 @@ Thumbs.db
 .vscode/
 .idea/
 *.zip
+scripts/tokenizer-build/node_modules
