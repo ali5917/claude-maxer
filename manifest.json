@@ -25,7 +25,7 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["src/injected/bridge.js", "src/styles/bar.css"],
+      "resources": ["src/injected/bridge.js", "src/styles/bar.css", "src/vendor/o200k_base.js"],
       "matches": ["https://claude.ai/*"]
     }
   ],
