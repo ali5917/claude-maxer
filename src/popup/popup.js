@@ -86,23 +86,40 @@ function calcAutoResetFireTime(usageData) {
 }
 
 function updateNextTrigger(data) {
+  const scheduledFireAt = data.scheduledTrigger?.enabled
+    ? calcNextFireTime(data.scheduledTrigger.time, data.scheduledTrigger.days || [])
+    : null;
+  const autoResetFireAt = data.autoReset?.enabled
+    ? calcAutoResetFireTime(data.usageData)
+    : null;
+
+  if (scheduledFireAt != null && autoResetFireAt != null) {
+    const fireAt = Math.min(scheduledFireAt, autoResetFireAt);
+    nextTriggerEl.textContent = `Next trigger at: ${formatDateTime(fireAt)}`;
+    return;
+  }
+
+  if (scheduledFireAt != null) {
+    nextTriggerEl.textContent = `Next trigger at: ${formatDateTime(scheduledFireAt)}`;
+    return;
+  }
+
+  if (autoResetFireAt != null) {
+    nextTriggerEl.textContent = `Next trigger at: ${formatDateTime(autoResetFireAt)}`;
+    return;
+  }
+
   if (data.scheduledTrigger?.enabled) {
-    const fireAt = calcNextFireTime(data.scheduledTrigger.time, data.scheduledTrigger.days || []);
-    nextTriggerEl.textContent = fireAt
-      ? `Next trigger at: ${formatDateTime(fireAt)}`
-      : 'Next trigger at: no upcoming scheduled time';
+    nextTriggerEl.textContent = 'Next trigger at: no upcoming scheduled time';
     return;
   }
 
   if (data.autoReset?.enabled) {
-    const fireAt = calcAutoResetFireTime(data.usageData);
-    nextTriggerEl.textContent = fireAt
-      ? `Next trigger at: ${formatDateTime(fireAt)}`
-      : 'Next trigger at: open Claude once to initialize auto-reset';
+    nextTriggerEl.textContent = 'Next trigger at: open Claude once to initialize auto-reset';
     return;
   }
 
-  nextTriggerEl.textContent = 'Next trigger at: not set';
+  nextTriggerEl.textContent = 'Choose an option to set a trigger.';
 }
 
 function updateDot() {
